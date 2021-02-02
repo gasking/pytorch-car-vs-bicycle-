@@ -1,0 +1,8 @@
+filename : "all_train.txt"
+ratio : 0.7
+model : "2.pth"
+iter_max : 5000
+ratio : 0.7
+learn : 0.005
+classes : ["bicycle",'car','phone']
+image_size : 224
