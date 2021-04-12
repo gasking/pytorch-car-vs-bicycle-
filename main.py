@@ -1,4 +1,5 @@
-import torch
+import torch,math
+import torch.nn as nn
 from  dataset import  data
 import torch.nn.functional as F
 import torch.optim as optim#优化器
@@ -7,9 +8,11 @@ import random
 from  torch.optim.lr_scheduler import StepLR
 import  torchvision.transforms as transforms
 from tqdm import tqdm
-from  models import alexnet,ResNet34
+from  models import alexnet,ResNet34,mobilenetv3
 import argparse
 import data_imread
+import  torch.utils.model_zoo as model_zoo
+import torchvision.models as models
 loader=data_imread.imread()
 size =loader['image_size']
 classes=loader['classes']
@@ -24,21 +27,38 @@ def main():
         arg.add_argument("--savemodel",type=str,default='1.pth',help='训练的模型保存路径')
         t=arg.parse_args()
         return t
+    def set_lr(optimizer, lr):
+     for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
     ar=arg()
     # Create dummy input
     data_loader=data(ar.file_name,ar.ratio)
     #设置迭代次数
     max_iters=ar.iter_max
     # Create model
-    #net=alexnet.AlexNet()
-    net=ResNet34.ResNet34()
+    net=models.vgg19_bn(pretrained=True)
+    for par in net.parameters():
+        par.requires_grad=False
+    net.classifier = nn.Sequential(
+            nn.Linear(512 * 7 * 7, 4096),
+            nn.ReLU(True),
+            nn.Dropout(),
+            nn.Linear(4096, 4096),
+            nn.ReLU(True),
+            nn.Dropout(),
+            nn.Linear(4096, len(classes)),
+        )
     if torch.cuda.is_available():
         net.cuda()
     #学习率
-    op=optim.Adam(net.parameters(),lr=ar.learn,weight_decay=1e-4)
+    op=optim.SGD(net.parameters(),lr=ar.learn,momentum=0.9,weight_decay=1e-4)
     _loss=torch.nn.CrossEntropyLoss()
     count=0
     for epoch in tqdm(range(max_iters)):
+        if epoch%100==0:
+            tmp_lr = 0.00001 + 0.5 * (ar.learn - 0.00001) * (
+                        1 + math.cos(math.pi * (epoch - 20) * 1. / (max_iters - 20)))
+            set_lr(op, tmp_lr)
         if count<data_loader.__len__():
             t=data_loader.__getitem__(count)
             img,traget=t['train'].unsqueeze(dim=0),t['train_label']
@@ -57,3 +77,4 @@ def main():
         else:
             count=random.randint(0,data_loader.__len__()-1)
     torch.save(net.state_dict(),ar.savemodel)
+main()
